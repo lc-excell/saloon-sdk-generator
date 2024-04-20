@@ -20,7 +20,7 @@ trait Deserializes
 
     public static function deserialize(mixed $data): mixed
     {
-        if (is_null($data)) {
+        if (is_null($data) || empty($data)) {
             return null;
         }
 
