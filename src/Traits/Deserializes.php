@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Crescat\SaloonSdkGenerator\Traits;
 
-use Crescat\SaloonSdkGenerator\Enums\SimpleType;
 use Crescat\SaloonSdkGenerator\Exceptions\InvalidAttributeTypeException;
 use DateTime;
 use ReflectionClass;
@@ -13,10 +12,7 @@ trait Deserializes
 {
     use HasComplexArrayTypes;
 
-    public function __deserialize(array $data): static
-    {
-        return static::deserialize($data);
-    }
+    protected static string $datetimeFormat = 'Y-m-d\TH:i:sP';  // RFC3339
 
     public static function deserialize(mixed $data): mixed
     {
@@ -50,7 +46,6 @@ trait Deserializes
         $attributeMap = $hasAttributeMap
             ? array_flip($reflectionClass->getProperty('attributeMap')->getValue())
             : [];
-        $unknownKeys = [];
 
         foreach ($data as $rawKey => $value) {
             $key = $rawKey;
@@ -59,49 +54,46 @@ trait Deserializes
             }
 
             if (! array_key_exists($key, $attributeTypes)) {
-                $unknownKeys[] = $key;
-
                 continue;
             }
             $deserializedParams[$key] = static::deserializeValue($value, $attributeTypes[$key]);
         }
 
-        if (count($unknownKeys) > 0) {
-            $cls = static::class;
-            echo "Warning: Unknown keys when deserializing into $cls: ".implode(', ', $unknownKeys)."\n";
-        }
-
         return new static(...$deserializedParams);
     }
 
-    protected static function deserializeValue(mixed $value, SimpleType|array|string $type): mixed
+    protected static function deserializeValue(mixed $value, array|string $type): mixed
     {
-        if (is_string($type) && ($simpleType = SimpleType::tryFrom($type))) {
-            return match ($simpleType) {
-                SimpleType::INTEGER => (int) $value,
-                SimpleType::FLOAT => (float) $value,
-                SimpleType::BOOLEAN => (bool) $value,
-                SimpleType::STRING => (string) $value,
-                SimpleType::DATE, SimpleType::DATETIME => DateTime::createFromFormat(DateTime::RFC3339, $value),
-                SimpleType::ARRAY, SimpleType::MIXED => $value,
-                SimpleType::NULL => null,
+        if (is_string($type)) {
+            // Not using SimpleType enum to avoid needing to import the enum in the generated code
+            $_value = match ($type) {
+                'int' => (int) $value,
+                'float' => (float) $value,
+                'bool' => (bool) $value,
+                'string' => (string) $value,
+                'date', 'datetime' => DateTime::createFromFormat(static::$datetimeFormat, $value),
+                'array', 'mixed' => $value,
+                'null' => null,
+                default => chr(0),
             };
-        } elseif (is_string($type)) {
+
+            if ($_value !== chr(0)) {
+                return $_value;
+            }
+
             if (! class_exists($type)) {
                 throw new InvalidAttributeTypeException("Class `$type` does not exist");
             } elseif ($type === DateTime::class) {
-                return DateTime::createFromFormat(DateTime::RFC3339, $value);
+                return DateTime::createFromFormat(static::$datetimeFormat, $value);
             }
 
             $deserialized = $type::deserialize($value);
 
             return $type::deserialize($value);
         } elseif (is_array($type)) {
-            $typeLen = count($type);
-            if ($typeLen !== 1) {
-                throw new InvalidAttributeTypeException(
-                    "Complex array type must have a single value (the type of the array items), $typeLen given"
-                );
+            // Handle optional complex array types
+            if ($value === null) {
+                return null;
             }
 
             $deserialized = [];

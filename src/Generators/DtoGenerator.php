@@ -5,18 +5,16 @@ declare(strict_types=1);
 namespace Crescat\SaloonSdkGenerator\Generators;
 
 use cebe\openapi\spec\Type;
-use Crescat\SaloonSdkGenerator\BaseDto;
 use Crescat\SaloonSdkGenerator\Data\Generator\ApiSpecification;
 use Crescat\SaloonSdkGenerator\Data\Generator\Schema;
 use Crescat\SaloonSdkGenerator\Enums\SimpleType;
-use Crescat\SaloonSdkGenerator\Generator;
 use Crescat\SaloonSdkGenerator\Helpers\MethodGeneratorHelper;
 use Crescat\SaloonSdkGenerator\Helpers\NameHelper;
 use Crescat\SaloonSdkGenerator\Helpers\Utils;
 use Nette\PhpGenerator\Literal;
 use Nette\PhpGenerator\PhpFile;
 
-class DtoGenerator extends Generator
+class DtoGenerator extends BaseDtoGenerator
 {
     public function generate(ApiSpecification $specification): PhpFile|array
     {
@@ -39,13 +37,14 @@ class DtoGenerator extends Generator
     public function generateDtoClass(Schema $schema): PhpFile
     {
         $className = NameHelper::dtoClassName($schema->type);
-        [$classFile, $namespace, $classType] = $this->makeClass($className, $this->config->dtoNamespaceSuffix);
+        [$classFile, $namespace, $classType] = $this->makeClass($className, $this->config->namespaceSuffixes['dto']);
 
-        $namespace->addUse(BaseDto::class);
+        $baseDtoFqn = $this->baseClassFqn();
+        $namespace->addUse($baseDtoFqn);
 
         $classType
             ->setFinal()
-            ->setExtends(BaseDto::class);
+            ->setExtends($baseDtoFqn);
 
         $classConstructor = $classType->addMethod('__construct');
 
@@ -60,10 +59,9 @@ class DtoGenerator extends Generator
             MethodGeneratorHelper::addParameterToMethod(
                 $classConstructor,
                 $property,
-                namespace: $property->isResponse ? $responseNamespace : $dtoNamespace,
                 promote: true,
                 visibility: 'public',
-                readonly: true,
+                namespace: $property->isResponse ? $responseNamespace : $dtoNamespace,
             );
 
             if ($property->rawName && $property->rawName !== $safeName) {
@@ -92,12 +90,16 @@ class DtoGenerator extends Generator
                 $classConstructor,
                 $additionalProperties,
                 namespace: $additionalProperties->isResponse ? $responseNamespace : $dtoNamespace,
-                promote: false,
             );
 
             $safeType = Utils::isBuiltinType($additionalProperties->type)
                 ? $additionalProperties->type
                 : NameHelper::safeClassName($additionalProperties->type);
+
+            if ($safeType === 'DateTime') {
+                $safeType = '\DateTimeInterface';
+            }
+
             $classType->addProperty('additionalProperties')
                 ->setPublic()
                 ->addComment("@var {$safeType}[]")
@@ -133,7 +135,7 @@ class DtoGenerator extends Generator
 
                 $literalType = new Literal(sprintf('%s::class', $safeType));
                 $safeName = NameHelper::safeVariableName($name);
-                $complexArrayTypes[$safeName] = [$literalType];
+                $complexArrayTypes[$safeName] = $literalType;
             }
             $classType->addProperty('complexArrayTypes', $complexArrayTypes)
                 ->setStatic()

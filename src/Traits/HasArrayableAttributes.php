@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace Crescat\SaloonSdkGenerator\Traits;
 
-use Crescat\SaloonSdkGenerator\Enums\SimpleType;
 use Crescat\SaloonSdkGenerator\Exceptions\InvalidAttributeTypeException;
-use DateTime;
+use DateTimeInterface;
 use ReflectionClass;
 
 trait HasArrayableAttributes
 {
     use HasComplexArrayTypes;
+
+    protected static string $datetimeFormat = 'Y-m-d\TH:i:sP';  // RFC3339
 
     /**
      * @var array{string, string}
@@ -48,37 +49,30 @@ trait HasArrayableAttributes
             if ($name === 'additionalProperties') {
                 $asArray = array_merge($asArray, $attributeAsArray);
             } else {
-                $originalName = $this->attributeMap[$name] ?? $name;
+                $originalName = static::$attributeMap[$name] ?? $name;
                 $asArray[$originalName] = $attributeAsArray;
             }
         }
 
-        return $asArray;
+        return array_filter($asArray, fn ($v) => $v !== null);
     }
 
-    public function valueToArray(mixed $value, SimpleType|array|string $type): mixed
+    public function valueToArray(mixed $value, array|string $type): mixed
     {
         if (is_null($value)) {
             return null;
-        } elseif ($value instanceof DateTime) {
-            return $value->format(DateTime::RFC3339);
-        }
-
-        if (is_string($type) && SimpleType::tryFrom($type)) {
-            return $value;
+        } elseif ($value instanceof DateTimeInterface) {
+            return $value->format(static::$datetimeFormat);
         } elseif (is_string($type)) {
-            if (! class_exists($type)) {
-                throw new InvalidAttributeTypeException("Class `$type` does not exist");
+            if (class_exists($type)) {
+                return $value->toArray();
             }
 
-            return $value->toArray();
+            return $value;
         } elseif (is_array($type)) {
-            $typeLen = count($type);
-
-            if ($typeLen !== 1) {
-                throw new InvalidAttributeTypeException(
-                    "Complex array type must have a single value (the type of the array items), $typeLen given"
-                );
+            // Handle optional complex array types
+            if ($value === null) {
+                return null;
             }
 
             $arrayified = [];
@@ -88,5 +82,7 @@ trait HasArrayableAttributes
 
             return $arrayified;
         }
+
+        throw new InvalidAttributeTypeException("Unrecognized attribute type `$type`");
     }
 }

@@ -1,9 +1,15 @@
+TODO:
+- Move response schemas to the OpenApi responses section, then parse them from there
+- Do the same with request schemas?
+- Remove OpenApiReference checks from parser?
+
+
 <p align="center"><img src=".github/header.png"></p>
 
 # Saloon SDK Generator - Simplified SDK Scaffolding 🚀
 
-[![Latest Version on Packagist](https://img.shields.io/packagist/v/crescat-io/saloon-sdk-generator.svg?style=flat-square)](https://packagist.org/packages/crescat-io/saloon-sdk-generator)
-[![Total Downloads](https://img.shields.io/packagist/dt/crescat-io/saloon-sdk-generator.svg?style=flat-square)](https://packagist.org/packages/crescat-io/saloon-sdk-generator)
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/highside-labs/saloon-sdk-generator.svg?style=flat-square)](https://packagist.org/packages/highsidelabs/saloon-sdk-generator)
+[![Total Downloads](https://img.shields.io/packagist/dt/highside-labs/saloon-sdk-generator.svg?style=flat-square)](https://packagist.org/packages/highsidelabs/saloon-sdk-generator)
 
 Introducing the Saloon SDK Generator – your tool for quickly creating the basic structure of PHP SDKs using the
 powerful [Saloon](https://docs.saloon.dev/) package.
@@ -75,13 +81,20 @@ Configure the `CodeGenerator` with the desired settings:
 
 ```php
 $generator = new CodeGenerator(
-   namespace: "App\Sdk",
-   resourceNamespaceSuffix: 'Resource',
-   requestNamespaceSuffix: 'Requests',
-   dtoNamespaceSuffix: 'Dto',
-   connectorName: 'MySDK', // Replace with your desired SDK name
-   outputFolder: './Generated', // Replace with your desired output folder
-   ignoredQueryParams: ['after', 'order_by', 'per_page'] // Ignore params used for pagination
+    namespace: "App\Sdk",
+    baseFilesNamespace: "App\Sdk\Base",
+    namespaceSuffixes: [
+        'resource' => 'Resource',
+        'request' => 'Request',
+        'dto' => 'Dto',
+    ],
+    connectorName: 'MySDK', // Replace with your desired SDK name
+    outputFolder: './Generated', // Replace with your desired output folder
+    ignoredParams: [
+        'query' => ['after', 'order_by', 'per_page'],
+        'body' => [],
+        'header' => [],
+    ],
 );
 ```
 
@@ -149,10 +162,14 @@ The Saloon SDK Generator is modular, allowing you to replace default generators 
 generation to your needs. The following generators can be customized:
 
 - `BaseResourceGenerator`
+- `BaseRequestGenerator`
+- `BaseResponseGenerator`
+- `BaseDtoGenerator`
 - `ConnectorGenerator`
 - `DtoGenerator`
 - `RequestGenerator`
 - `ResourceGenerator`
+- `SupportingFilesGenerator`
 
 ## Core Data Structures
 
@@ -442,10 +459,8 @@ composer build
 
 - Create configuration (sdkgenerator --config=sdkgenerator.php/json) file that allows you to override behaviour like:
     - what body format to use by default or fallback on
-    - ignored parameters,
     - how to handle Pagination
     - if JSON bodies with null values should be removed
-    - If you want resource classes or not
     - failure handling  (AlwaysThrowOnErrors, custom exception classes,
       or [custom method](https://docs.saloon.dev/the-basics/handling-failures#customising-when-saloon-thinks-a-request-has-failed))
     - etc... (feel free to [add suggestions](https://github.com/crescat-io/saloon-sdk-generator/issues))
@@ -454,7 +469,6 @@ composer build
     - new (parse code and only add code that is "new", aka new params, new methods),
     - prompt user for each conflict (like git in interactive mode)
     - etc...
-- Generate DTOs based on JSON responses
 - When no body can be parsed for POST requests, it should warn the user and add a TODO in the generated code.
 - Support older swagger API specification
 - Generate tests for all endpoints using Request mocking ([see](https://docs.saloon.dev/testing/recording-requests))

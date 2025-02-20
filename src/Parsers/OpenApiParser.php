@@ -101,6 +101,7 @@ class OpenApiParser implements Parser
             responses: $this->mapResponses($operation->responses),
             description: $operation->description,
             queryParameters: $this->mapParams($operation->parameters, 'query'),
+            headerParameters: $this->mapParams($operation->parameters, 'header'),
             // TODO: Check if this differs between spec versions
             pathParameters: $pathParams + $this->mapParams($operation->parameters, 'path'),
             bodySchema: $this->parseBody($operation->requestBody),
@@ -115,6 +116,17 @@ class OpenApiParser implements Parser
     {
         $parsedSchemas = [];
         foreach ($schemas as $name => $schema) {
+            $_parent = $parent;
+            while ($_parent !== null) {
+                // We should only ever get circular schema refs from a schema property, so we need
+                // to check that the parent's rawName (which would be a property name) matches the
+                // name of the schema we're currently iterating over
+                if ($_parent->rawName === $name && $_parent->equalsOpenApiSchema($schema)) {
+                    continue 2;
+                }
+                $_parent = $_parent->parent;
+            }
+
             $parsed = $this->parseSchema($schema, $parent, $name);
             if ($parsed) {
                 $parsedSchemas[$name] = $parsed;
@@ -164,6 +176,14 @@ class OpenApiParser implements Parser
                     parent: $parent,
                 );
             } else {
+                // This is just so that, in the recursive parseSchema call below where we determine the actual
+                // item schema, we know the item type of this array
+                $tempItemSchema = new Schema(
+                    name: $name,
+                    type: 'array',
+                    description: $schema->description,
+                );
+                $parsedSchema->items = $tempItemSchema;
                 $parsedSchema->items = $this->parseSchema($schema->items, $parsedSchema);
                 // TODO: update this once TODO in mapResponses is addressed
                 $parsedSchema->isResponse = in_array("{$parsedSchema->items->type}[]", $this->responseSchemaTypes);
@@ -174,12 +194,22 @@ class OpenApiParser implements Parser
                 $required = [];
             }
 
+            // This is a temporary placeholder value that is used until the schema's properties
+            // are parsed. It allows child schemas who are passed this as a parent to know
+            // which properties its parent has, which is useful in recursive schemas
+            $tempProperties = array_combine(
+                array_keys($schema->properties),
+                array_fill(0, count($schema->properties), null)
+            );
             $parsedSchema = new Schema(
                 name: $schema->title ?? $parentPropName,
                 rawName: $parentPropName,
                 nullable: $schema->nullable,
+                // Using $schema->title instead of $schema->type since title is the user-defined
+                // type name from the schema file
                 type: $schema->title ?? 'object',
                 description: $schema->description,
+                properties: $tempProperties,
                 required: $required,
                 parent: $parent,
             );
@@ -313,6 +343,8 @@ class OpenApiParser implements Parser
         }
 
         $parsedSchema = $this->parseSchema($mediaType->schema);
+        $parsedSchema->contentType = $contentType;
+        $parsedSchema->bodyContentType = $contentType;
 
         return $parsedSchema;
     }
@@ -354,8 +386,11 @@ class OpenApiParser implements Parser
                         if ($schema instanceof OpenApiReference) {
                             $schema = $content->schema->resolve();
                         }
+
                         $parsedSchema = $this->parseSchema($schema);
+                        $parsedSchema->contentType = $contentType;
                         $parsedSchema->isResponse = true;
+
                         if (! in_array($parsedSchema->type, $this->responseSchemaTypes)) {
                             $savedType = $parsedSchema->type;
                             // Without this, we end up with "array" in the response types list.

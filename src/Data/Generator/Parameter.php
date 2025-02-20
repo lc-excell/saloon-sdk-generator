@@ -33,6 +33,8 @@ class Parameter
         $type = $this->type;
         if (! Utils::isBuiltInType($type)) {
             $type = NameHelper::safeClassName($type);
+        } elseif ($type === 'DateTime') {
+            $type = '\DateTimeInterface';
         }
         $nullString = str_contains($type, '|') ? 'null|' : '?';
 

@@ -9,7 +9,6 @@ use Crescat\SaloonSdkGenerator\Data\Generator\Endpoint;
 use Crescat\SaloonSdkGenerator\Generator;
 use Crescat\SaloonSdkGenerator\Helpers\NameHelper;
 use Nette\PhpGenerator\ClassType;
-use Nette\PhpGenerator\Literal;
 use Nette\PhpGenerator\PhpFile;
 use Saloon\Http\Connector;
 
@@ -38,10 +37,11 @@ class ConnectorGenerator extends Generator
         $classType->addMethod('resolveBaseUrl')
             ->setReturnType('string')
             ->setBody(
-                new Literal(sprintf(sprintf("return '%s';", $specification->baseUrl ?? 'TODO')))
+                sprintf("return '%s';", $specification->baseUrl)
             );
 
         $namespace = $classFile
+            ->setStrictTypes()
             ->addNamespace("{$this->config->namespace}")
             ->addUse(Connector::class);
 
@@ -66,7 +66,7 @@ class ConnectorGenerator extends Generator
                 ->addMethod(NameHelper::safeVariableName($collection))
                 ->setReturnType($resourceFQN)
                 ->setBody(
-                    new Literal(sprintf('return new %s($this);', $resourceClassName))
+                    sprintf('return new %s($this);', $resourceClassName)
                 );
 
         }
